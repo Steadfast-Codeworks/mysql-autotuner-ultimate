@@ -48,7 +48,7 @@ The Ultimate Steadfast MySQL Auto-Tuner analyzes your server's hardware specific
 1. Extract the archive:
    ```bash
    sudo mkdir -p /opt/mysql-autotuner
-   sudo tar -xzf mysql-autotuner-ultimate_v1.0.4.tar.gz -C /opt/mysql-autotuner
+   sudo tar -xzf mysql-autotuner-ultimate-1.0.4.tar.gz -C /opt/mysql-autotuner --strip-components=1
    cd /opt/mysql-autotuner
    ```
 
