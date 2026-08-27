@@ -1,0 +1,262 @@
+# =============================================================================
+# Ultimate Steadfast MySQL Auto-Tuner - Annotated Configuration (v1.0.4)
+# =============================================================================
+#
+# This file serves as a comprehensive teaching guide for system administrators,
+# contributors, and anyone looking to understand the core logic of the
+# Steadfast Auto-Tuner. It explains the "why" behind each parameter, drawing
+# from an evidence base of 66 real-world production optimization cases.
+#
+# Author: R.L. Burger (Steadfast Codeworks)
+# Date: 2025-09-07
+# Last Updated: 2026-08-24
+# Version: 1.0.4
+# Copyright (c) 2026 R.L. Burger
+# Project: Steadfast Tools
+# Website: https://www.steadfasttools.com
+# License: MIT License
+# -----------------------------------------------------------------------------
+
+# -- METADATA & EVIDENCE BASE --
+# This section provides context on the toolkit's version and the data that
+# shaped its intelligence.
+
+metadata:
+  version: 1.0.4
+  author: "R.L. Burger (Steadfast Codeworks)"
+  description: >
+    Ultimate steadfast configuration for MySQL/MariaDB optimization. This
+    annotated version explains the logic derived from 66 production cases,
+    covering DirectAdmin file limits, multi-pass tuning, and post-migration
+    scenarios.
+
+evidence_base:
+  # The total number of production server optimization logs analyzed to build
+  # the decision engine's logic. A larger base increases confidence.
+  total_cases: 66
+
+  # Distribution of server environments in our evidence base. This helps
+  # understand the platform-specific biases in the logic.
+  platform_distribution:
+    directadmin: 28
+    cpanel: 22
+    litespeed: 16
+
+  # Coverage of specific, complex scenarios. This demonstrates the toolkit's
+  # ability to handle advanced, real-world challenges.
+  scenario_coverage:
+    multi_pass: 18         # Servers requiring 2-3 optimization passes.
+    myisam_migration: 12 # Servers optimized after MyISAM -> InnoDB migration.
+    file_limits: 8         # Servers where file descriptor limits were the bottleneck.
+    peak_hour: 15        # Logs captured during high-load periods.
+    anomaly_handling: 25 # Cases involving XML-RPC attacks, cron spikes, etc.
+
+# -----------------------------------------------------------------------------
+
+# -- PLATFORM DETECTION --
+# The engine automatically identifies the server environment to apply
+# platform-specific logic, such as file limit adjustments for DirectAdmin.
+
+platform_detection:
+  signatures:
+    # DirectAdmin is identified by the presence of its core directory, the
+    # 'dataskq' process, or its characteristic database naming convention.
+    directadmin:
+      - "/usr/local/directadmin/"
+      - "dataskq"
+      - "user_db_pattern: '^[a-zA-Z0-9]+_[a-zA-Z0-9]+$'"
+
+    # cPanel has a similar directory and process structure that the engine
+    # looks for.
+    cpanel:
+      - "/usr/local/cpanel/"
+      - "cpaneld"
+      - "user_db_pattern: '^[a-zA-Z0-9]+_[a-zA-Z0-9]+$'"
+
+    # LiteSpeed is detected by its installation path or the 'lsws' process.
+    litespeed:
+      - "/usr/local/lsws/"
+      - "litespeed"
+      - "http_stack: 'lsws+lsphp'"
+
+# -----------------------------------------------------------------------------
+
+# -- CRITICAL FILE LIMIT LOGIC --
+# This is one of the most critical features, addressing a common failure
+# point on high-density DirectAdmin servers.
+
+file_limit_logic:
+  # On DirectAdmin servers with a high table count, the default open files
+  # limit is often too low, causing MySQL/MariaDB to fail on restart after
+  # tuning. This rule automatically detects this scenario.
+  directadmin:
+    table_count_threshold: 30000 # Trigger when table count exceeds 30,000.
+    required_limit_nofile: 200000 # The safe limit derived from production cases.
+    systemd_edit_required: true    # Requires a systemd drop-in file.
+    confidence: 0.95             # Very high confidence based on consistent failures.
+
+  # cPanel handles file descriptors more efficiently, so the threshold is higher
+  # and the required limit is lower.
+  cpanel:
+    table_count_threshold: 50000
+    required_limit_nofile: 100000
+    systemd_edit_required: false # Usually adjustable via MySQL configuration.
+    confidence: 0.80
+
+  # LiteSpeed with DirectAdmin may still need this adjustment.
+  litespeed:
+    table_count_threshold: 40000
+    required_limit_nofile: 150000
+    systemd_edit_required: false
+    confidence: 0.85
+
+# -----------------------------------------------------------------------------
+
+# -- MULTI-PASS OPTIMIZATION LOGIC --
+# The toolkit applies optimizations progressively over 3 passes to ensure
+# stability. Each pass becomes more aggressive as confidence grows.
+
+multi_pass_logic:
+  # Pass 1: A conservative first step to establish a stable baseline.
+  pass_1:
+    confidence_multiplier: 1.0  # Use base confidence scores.
+    buffer_pool_multiplier: 0.7 # Allocate 70% of the ideal buffer pool size.
+    log_file_ratio: 0.15        # Smaller log files for initial stability.
+    connection_headroom: 1.2    # 20% headroom for connections.
+
+  # Pass 2: After 24 hours of stability, apply more significant improvements.
+  pass_2:
+    confidence_multiplier: 1.15 # Increase confidence by 15%.
+    buffer_pool_multiplier: 0.85# Allocate 85% of the ideal buffer pool.
+    log_file_ratio: 0.20        # Increase log file size relative to the pool.
+    table_cache_multiplier: 1.5 # Scale table caches more aggressively.
+
+  # Pass 3: The final pass, aiming for optimal configuration.
+  pass_3:
+    confidence_multiplier: 1.25 # 25% confidence boost.
+    buffer_pool_multiplier: 0.95# Allocate 95% of the ideal buffer pool.
+    log_file_ratio: 0.25        # The ideal 25% log-to-pool ratio.
+    table_cache_multiplier: 2.0 # Double the table cache headroom.
+
+# -----------------------------------------------------------------------------
+
+# -- POST-MIGRATION & ANOMALY HANDLING --
+# Specialized logic for common, high-impact events.
+
+post_migration_logic:
+  # After a MyISAM-to-InnoDB migration, memory must be reallocated.
+  key_buffer_reduction: 0.8   # Shrink the old MyISAM key_buffer_size by 80%.
+  buffer_pool_adjustment: 0.9 # If memory pressure is high, trim the buffer pool by 10%.
+  timeout_reduction: 0.5      # Halve timeouts to clear old, inefficient connections.
+  confidence_modifier: 0.15   # Boost confidence for migration-specific rules.
+
+peak_hour_logic:
+  # Logic to handle predictable traffic surges.
+  connection_spike_threshold: 0.8 # Connections utilization ratio >0.8 triggers peak mode.
+  confidence_modifier: 0.10       # Boost confidence for peak-hour adjustments.
+
+anomaly_detection:
+  # Rules to detect and mitigate common performance killers.
+  aborted_connections:
+    threshold: 0.03 # Trigger if >3% of connections are aborted.
+    actions:
+      - reduce_timeouts: 0.5
+      - reduce_max_connections: 0.8
+    risk_penalty: -0.1 # Reduce confidence due to potential app/network issues.
+
+  memory_pressure:
+    swap_usage_threshold_gb: 10 # Trigger if swap usage exceeds 10GB.
+    actions:
+      - reduce_buffer_pool: 0.85
+      - reduce_per_connection_buffers: 0.5
+    risk_penalty: -0.2 # High risk; significantly reduce confidence.
+
+  xmlrpc_overload:
+    # Detects brute-force attacks (e.g., on WordPress XML-RPC).
+    tmp_disk_table_threshold: 300000
+    select_full_join_threshold: 100000
+    actions:
+      - increase_tmp_table_size: 1.5
+      - increase_join_buffer_size: 1.2
+    risk_penalty: -0.15 # Attack in progress, moderate risk to tuning.
+
+# -----------------------------------------------------------------------------
+
+# -- CONFIDENCE ENGINE & SAFETY --
+# The core of the decision-making process, balancing evidence with safety.
+
+confidence_engine:
+  base_confidence: 0.7 # All recommendations start with a 70% confidence score.
+  evidence_modifiers:
+    # Confidence is increased based on supporting evidence.
+    table_count: 0.10
+    memory_usage: 0.15
+    performance_metrics: 0.20
+    platform_specific: 0.10
+  risk_penalties:
+    # Confidence is reduced when risks are detected.
+    memory_pressure: -0.20
+    connection_overflow: -0.10
+    high_aborted_connections: -0.10
+    xmlrpc_overload: -0.15
+
+fallback_logic:
+  # Absolute safety limits that will never be exceeded, regardless of
+  # recommendations. These are platform-aware.
+  safety_guardrails:
+    max_buffer_pool_percent:
+      directadmin: 0.60 # More conservative on DA due to other services.
+      cpanel: 0.70
+      litespeed: 0.75
+      default: 0.80
+    max_connections:
+      directadmin: 300
+      cpanel: 500
+      litespeed: 400
+      default: 1000
+    min_buffer_pool_mb: 1024 # Never recommend a buffer pool smaller than 1GB.
+    max_log_file_size_gb: 16 # Prevents excessively long recovery times.
+
+# -----------------------------------------------------------------------------
+
+# -- BASE PARAMETER RULES --
+# The starting point for all recommendations. The engine refines these
+# using the logic defined above.
+
+parameter_rules:
+  innodb_buffer_pool_size:
+    base_recommendation: "min(total_ram_mb * 0.7, max(innodb_data_size_mb * 1.5, 1024))"
+    multi_pass_enabled: true
+    platform_guardrail: "max_buffer_pool_percent"
+
+  innodb_log_file_size:
+    base_recommendation: "innodb_buffer_pool_size * 0.25"
+    multi_pass_enabled: true
+    platform_guardrail: "max_log_file_size_gb"
+
+  max_connections:
+    base_recommendation: "max_used_connections * 2"
+    multi_pass_enabled: false
+    platform_guardrail: "max_connections"
+
+  table_definition_cache:
+    base_recommendation: "total_tables * 1.1"
+    multi_pass_enabled: true
+
+  tmp_table_size:
+    base_recommendation: "min(current_tmp_size * 2, 512)"
+    multi_pass_enabled: false
+
+  join_buffer_size:
+    base_recommendation: "min(current_join_buffer * 4, 8192)"
+    multi_pass_enabled: false
+
+  key_buffer_size:
+    base_recommendation: "16M"
+    post_migration_enabled: true
+
+# =============================================================================
+# End of Annotated Configuration
+# =============================================================================
+
+

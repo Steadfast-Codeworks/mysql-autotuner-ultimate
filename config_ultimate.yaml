@@ -1,0 +1,220 @@
+# MySQL Auto-Tuner Ultimate Steadfast Configuration v1.0.4
+# Evidence Base: 66 Real-World Production Cases
+# Author: R.L. Burger (Steadfast Codeworks)
+# Date: 2025-09-07
+# Last Updated: 2026-08-24
+# Version: 1.0.4
+# Copyright (c) 2026 R.L. Burger
+# Project: Steadfast Tools
+# Website: https://www.steadfasttools.com
+# License: MIT License
+
+metadata:
+  version: 1.0.4
+  author: "R.L. Burger (Steadfast Codeworks)"
+  description: >
+    Ultimate steadfast configuration for MySQL/MariaDB optimization, incorporating
+    DirectAdmin file limit insights, advanced multi-pass patterns, and enhanced
+    migration logic from 66 production cases.
+
+# M12: MySQL connection settings. Every key is OPTIONAL — leave the block
+# commented out and the tool auto-detects (/root/.my.cnf, /etc/mysql/debian.cnf,
+# the DirectAdmin config, then unix-socket auth). Set them when auto-detection
+# cannot work: a non-standard socket, a remote database, or credentials kept in
+# a custom file. Each is also settable on the command line
+# (--mysql-host/--mysql-port/--mysql-user/--mysql-socket/--defaults-file).
+#
+# Prefer 'defaults_file' over an inline password: this YAML is world-readable in
+# a typical install, whereas a MySQL option file can be chmod 600.
+# mysql:
+#   host: localhost
+#   port: 3306
+#   user: root
+#   socket: /var/lib/mysql/mysql.sock
+#   defaults_file: /root/.mysql-autotuner.cnf
+#   connect_timeout: 30     # fail fast on an unreachable server
+#   read_timeout: 600       # information_schema scans on large servers are slow
+
+evidence_base:
+  total_cases: 66
+  platform_distribution:
+    directadmin: 28
+    cpanel: 22
+    litespeed: 16
+  scenario_coverage:
+    multi_pass: 18
+    myisam_migration: 12
+    file_limits: 8
+    peak_hour: 15
+    anomaly_handling: 25
+
+# Signature forms:
+#   "/path/..."   -> matched with os.path.exists()
+#   "procname"    -> matched with pgrep
+#   "key: value"  -> matched against the named metric (substring)
+# L11: the identical "user_db_pattern: '^[a-zA-Z0-9]+_[a-zA-Z0-9]+$'" entry used
+# to appear under BOTH directadmin and cpanel. It contains a ':' so it was
+# parsed as a metric signature, looked up a metric named 'user_db_pattern' that
+# does not exist, and always missed — which was lucky, because implementing it
+# as written would have been WORSE: the pattern matches cPanel and DirectAdmin
+# database names identically, and DirectAdmin is tested first, so every cPanel
+# server would have mis-detected as DirectAdmin and picked up its stricter 0.6
+# RAM cap and 300-connection limit. Shared-hosting database naming is a real
+# signal but not a discriminator, so it stays where it belongs: the heuristic
+# fallback in detect_platform(), used only when no path/process signature hits.
+platform_detection:
+  signatures:
+    directadmin:
+      - "/usr/local/directadmin/"
+      - "dataskq"
+    cpanel:
+      - "/usr/local/cpanel/"
+      - "cpaneld"
+    litespeed:
+      - "/usr/local/lsws/"
+      - "litespeed"
+
+file_limit_logic:
+  directadmin:
+    table_count_threshold: 30000
+    required_limit_nofile: 200000
+    systemd_edit_required: true
+    confidence: 0.95
+  cpanel:
+    table_count_threshold: 50000
+    required_limit_nofile: 100000
+    systemd_edit_required: false
+    confidence: 0.8
+  litespeed:
+    table_count_threshold: 40000
+    required_limit_nofile: 150000
+    systemd_edit_required: false
+    confidence: 0.85
+
+multi_pass_logic:
+  pass_1:
+    confidence_multiplier: 1.0
+    buffer_pool_multiplier: 0.7
+    log_file_ratio: 0.15
+    # (M14: 'connection_headroom: 1.2' removed — nothing read it. Connection
+    #  headroom already comes from the max_used_connections * 2 base formula and
+    #  the per-platform max_connections guardrail.)
+  pass_2:
+    confidence_multiplier: 1.15
+    buffer_pool_multiplier: 0.85
+    log_file_ratio: 0.2
+    table_cache_multiplier: 1.5
+  pass_3:
+    confidence_multiplier: 1.25
+    buffer_pool_multiplier: 0.95
+    log_file_ratio: 0.25
+    table_cache_multiplier: 2.0
+
+post_migration_logic:
+  key_buffer_reduction: 0.8
+  buffer_pool_adjustment: 0.9
+  timeout_reduction: 0.5
+  confidence_modifier: 0.15
+
+peak_hour_logic:
+  connection_spike_threshold: 0.8
+  confidence_modifier: 0.1
+  # (M14: 'connection_scaling_factor' and 'emergency_connection_scaling'
+  #  removed — nothing read them.)
+
+# Anomaly names here MUST match UltimateDecisionEngine.ANOMALY_NAMES and the
+# keys under confidence_engine.risk_penalties. `--check-config` enforces it.
+#
+# `actions:` scales an already-generated recommendation by a bounded factor.
+# These were dead config until v1.0.2 — detecting an anomaly changed nothing —
+# so a detected memory-pressure event now genuinely shrinks the buffer-pool
+# recommendation instead of only logging. Every adjustment still passes through
+# the safety guardrails afterwards.
+anomaly_detection:
+  aborted_connections:
+    threshold: 0.03
+    actions:
+      - reduce_max_connections: 0.8
+  memory_pressure:
+    swap_usage_threshold_gb: 10
+    actions:
+      - reduce_buffer_pool: 0.85
+      - reduce_per_connection_buffers: 0.5
+  xmlrpc_overload:
+    tmp_disk_table_threshold: 300000
+    select_full_join_threshold: 100000
+    actions:
+      - increase_tmp_table_size: 1.5
+      - increase_join_buffer_size: 1.2
+  connection_spikes:
+    utilisation_threshold: 0.95
+  # (M14: the per-anomaly 'risk_penalty' keys were removed. They looked
+  #  authoritative but nothing read them — confidence penalties come from
+  #  confidence_engine.risk_penalties below, and having both invited exactly the
+  #  drift this release is cleaning up.)
+
+confidence_engine:
+  base_confidence: 0.7
+  evidence_modifiers:
+    table_count: 0.1
+    memory_usage: 0.15
+    performance_metrics: 0.2
+    platform_specific: 0.1
+  # M1: these keys are anomaly names. Two of them used to be spelled differently
+  # from what detect_anomalies() emits ('connection_overflow' and
+  # 'high_aborted_connections'), so `risk_penalties.get(anomaly, 0)` returned 0
+  # and confidence was INFLATED on exactly the stressed servers where it should
+  # have dropped.
+  risk_penalties:
+    aborted_connections: -0.1
+    memory_pressure: -0.2
+    xmlrpc_overload: -0.15
+    connection_spikes: -0.1
+
+fallback_logic:
+  safety_guardrails:
+    max_buffer_pool_percent:
+      directadmin: 0.6
+      cpanel: 0.7
+      litespeed: 0.75
+      default: 0.8
+    max_connections:
+      directadmin: 300
+      cpanel: 500
+      litespeed: 400
+      default: 1000
+    min_buffer_pool_mb: 1024
+    max_log_file_size_gb: 16
+    # Refuse to recommend shrinking innodb_buffer_pool_size by more than this
+    # fraction of the current value unless --allow-buffer-pool-shrink is passed.
+    max_buffer_pool_shrink_percent: 0.20
+
+# ---------------------------------------------------------------------------
+# M14: the 'parameter_rules:' section was REMOVED in v1.0.2.
+#
+# It looked like configuration but nothing ever read it — the formulas live in
+# _generate_base_recommendations() in mysql-autotuner.py — and it had already
+# drifted from the code it appeared to describe. It claimed
+# "innodb_log_file_size = innodb_buffer_pool_size * 0.25" when the code uses the
+# CURRENT buffer pool, not the recommended one. Config-shaped documentation is
+# the exact trap this release is closing, so the reference below is a comment
+# and can never be mistaken for a live setting.
+#
+# Current base formulas (authoritative source: mysql-autotuner.py):
+#   innodb_buffer_pool_size  min(total_ram_mb * 0.7,
+#                                max(innodb_data_size_mb * 1.5, 1024))
+#                            then x multi_pass_logic.pass_N.buffer_pool_multiplier
+#                            then platform max_buffer_pool_percent cap
+#                            then OS-reserve cap and no-shrink guard
+#   innodb_log_file_size     max(CURRENT buffer pool * 0.25, 256), then
+#                            x multi_pass_logic.pass_N.log_file_ratio,
+#                            capped at max_log_file_size_gb
+#   max_connections          max_used_connections * 2, capped per platform
+#   table_definition_cache   total_tables * 1.1  (raise only)
+#   tmp_table_size           min(current * 2, 512)  (raise only, 24h uptime)
+#   join_buffer_size         min(current * 4, 8192) (raise only, 24h uptime)
+#   thread_cache_size        min(max(current * 2, 16), 256) (raise only, 24h)
+#   key_buffer_size          max(myisam_index_size_mb * 1.2, 16)  (sized from MyISAM index blocks, not data)
+# ---------------------------------------------------------------------------
+
+
